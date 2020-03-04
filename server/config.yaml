@@ -5,6 +5,3 @@ logging:
     com.arjuna: debug
     org.infinispan: debug
     org.jgroups: debug
-jgroups:
-  dnsPing:
-    address: "127.0.0.1"

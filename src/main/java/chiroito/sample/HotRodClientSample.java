@@ -13,6 +13,13 @@ docker run -p 11222:11222 -v C:\Users\cito\develop\infinispanSample\server:/user
 public class HotRodClientSample {
 
     public static void main(String[] args) {
+
+        String hostname = "127.0.1.1";
+        int port = 11222;
+        String user = "chito";
+        String password = "pass";
+        boolean isAuth = false;
+
         ConfigurationBuilder cb
                 = new ConfigurationBuilder();
         cb.marshaller(new ProtoStreamMarshaller())
@@ -20,12 +27,21 @@ public class HotRodClientSample {
                 .enable()
                 .jmxDomain("org.infinispan")
                 .addServer()
-                .host("192.168.65.3")
-//                .host("172.17.0.2")
-                .port(11222);
-//                .security().authentication().realm("default").serverName("infinispan").saslMechanism("DIGEST-MD5").username("unnX9bUAfT").password("T3fkt0ttUA");
+                .host(hostname)
+                .port(port);
+
+        if (isAuth) {
+            cb.security()
+                    .authentication()
+                    .realm("default")
+                    .serverName("infinispan")
+                    .saslMechanism("DIGEST-MD5")
+                    .username(user)
+                    .password(password);
+        }
+
         RemoteCacheManager manager = new RemoteCacheManager(cb.build());
-        ;
+
         RemoteCache<Object, Object> c = manager.getCache("custom-cache");
         c.put("key", "value");
 

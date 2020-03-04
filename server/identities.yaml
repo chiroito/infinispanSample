@@ -1,0 +1,5 @@
+credentials:
+  - username: chito
+    password: pass
+    roles:
+      - admin
