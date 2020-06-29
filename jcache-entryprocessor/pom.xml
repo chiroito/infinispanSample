@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>jcache-entryprocessor</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <javac.target>1.8</javac.target>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <version.infinispan>11.0.0.Final</version.infinispan>
+        <version.jcache>1.1.1</version.jcache>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.infinispan</groupId>
+                <artifactId>infinispan-bom</artifactId>
+                <version>${version.infinispan}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- 必須：JCache をやるための依存関係 -->
+        <dependency>
+            <groupId>javax.cache</groupId>
+            <artifactId>cache-api</artifactId>
+            <version>${version.jcache}</version>
+        </dependency>
+
+        <!-- 選択：Embeddedモードならこれが必要 -->
+        <dependency>
+            <groupId>org.infinispan</groupId>
+            <artifactId>infinispan-jcache</artifactId>
+        </dependency>
+
+        <!-- 選択：リモート接続するならこれが必要 -->
+        <!--        <dependency>-->
+        <!--            <groupId>org.infinispan</groupId>-->
+        <!--            <artifactId>infinispan-jcache-remote</artifactId>-->
+        <!--        </dependency>-->
+
+        <!-- 選択：独自のエンティティクラスを処理するならこれが必要 -->
+        <!--        <dependency>-->
+        <!--            <groupId>org.infinispan.protostream</groupId>-->
+        <!--            <artifactId>protostream-processor</artifactId>-->
+        <!--            <version>4.3.2.Final</version>-->
+        <!--        </dependency>-->
+    </dependencies>
+</project>
