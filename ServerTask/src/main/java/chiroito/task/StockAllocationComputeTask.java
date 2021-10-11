@@ -11,7 +11,7 @@ import java.util.Map;
  * 指定された商品の在庫を減らす処理
  * 在庫数が正しく減っていく
  */
-public class StockAllocationConputeTask implements ServerTask<Boolean> {
+public class StockAllocationComputeTask implements ServerTask<Boolean> {
 
     private TaskContext context;
 
@@ -45,6 +45,6 @@ public class StockAllocationConputeTask implements ServerTask<Boolean> {
 
     @Override
     public String getName() {
-        return "StockAllocationConputeTask";
+        return "StockAllocationComputeTask";
     }
 }

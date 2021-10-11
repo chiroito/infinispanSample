@@ -11,7 +11,7 @@ import java.util.Map;
  * 在庫数が正しく減っていかないため、この様な実装は避けるべきです。
  * 正しい実装方法はStockAllocationConputeTaskを参照して下さい
  *
- * @see chiroito.task.StockAllocationConputeTask
+ * @see StockAllocationComputeTask
  */
 public class StockAllocationGetPutTask implements ServerTask<Boolean> {
 

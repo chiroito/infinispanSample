@@ -1,5 +1,7 @@
 package chiroito;
 
+import chiroito.task.LibraryInitializer;
+import chiroito.task.StockEntity;
 import org.infinispan.client.hotrod.DefaultTemplate;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
@@ -7,14 +9,18 @@ import org.infinispan.client.hotrod.configuration.Configuration;
 import org.infinispan.client.hotrod.configuration.ConfigurationBuilder;
 import org.infinispan.commons.api.CacheContainerAdmin;
 import org.infinispan.commons.marshall.ProtoStreamMarshaller;
+import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class Main {
 
@@ -24,15 +30,12 @@ public class Main {
     private static final String user = "admin";
     private static final String password = "password";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
 
         Configuration configuration = createConfiguration();
 
         RemoteCacheManager manager = new RemoteCacheManager(configuration);
-        manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("custom-cache", DefaultTemplate.DIST_SYNC);
-//        manager.administration().createCache("custom-cache", DefaultTemplate.DIST_SYNC);
-//        RemoteCache<Object, Object> c = manager.administration().createCache("custom-cache", "default");
-        RemoteCache<Object, Object> cache = manager.getCache("custom-cache");
+        RemoteCache<Object, Object> cache = manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("custom-cache", DefaultTemplate.DIST_SYNC);
 
         // サーバのPIDを取得する
         checkPid(cache);
@@ -40,13 +43,25 @@ public class Main {
         // サーバで処理をしているスレッドの情報を取得する
         checkThreadInformation(cache);
 
-        rushTest(cache, "StockAllocationConputeTask");
-        rushTest(cache, "StockAllocationGetPutTask");
+        // サーバで処理する際に排他処理を行うスタックを取得する
+        checkCacheCompute(cache);
+
+        // 負荷試験、排他処理がきちんと行われる
+        rushTest(cache, "StockAllocationComputeTask", (i) -> cache.put(1, 100_000), (i) -> (Integer) cache.get(1));
+
+        // 負荷試験、排他処理が行われないため、結果としてはエラーになる
+        rushTest(cache, "StockAllocationGetPutTask", (i) -> cache.put(1, 100_000), (i) -> (Integer) cache.get(1));
+
+        // 負荷試験、独自のクラスをキャッシュするようにして、排他的な処理をする
+        RemoteCache<Integer, StockEntity> stockCache = manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("stock-cache", DefaultTemplate.DIST_SYNC);
+        rushTest(stockCache, "StockAllocationComputeWithLogicTask", (i) -> stockCache.put(1, new StockEntity(100_000)), (i) -> stockCache.get(1).getNum());
 
         manager.stop();
     }
 
-    private static Configuration createConfiguration() {
+    private static Configuration createConfiguration() throws Exception{
+
+//        LibraryInitializer initializer = (LibraryInitializer)(Class.forName("chiroito.task.LibraryInitializerImpl").getConstructor().newInstance());
 
         ConfigurationBuilder cb
                 = new ConfigurationBuilder();
@@ -57,6 +72,7 @@ public class Main {
                 .addServer()
                 .host(hostname)
                 .port(port)
+                .addContextInitializer("chiroito.task.LibraryInitializerImpl")
                 // デフォルトは10
                 .asyncExecutorFactory().addExecutorProperty("infinispan.client.hotrod.default_executor_factory.pool_size", "10")
                 //デフォルトは100,000
@@ -66,13 +82,10 @@ public class Main {
             cb.security()
                     .authentication()
                     .realm("default")
-//                    .serverName("infinispan")
                     .saslMechanism("DIGEST-MD5")
                     .username(user)
                     .password(password);
         }
-
-//        cb.security().authentication().username("admin").password("password").realm("default").saslMechanism("DIGEST-MD5");
 
         return cb.build();
     }
@@ -110,7 +123,20 @@ public class Main {
         cache.clear();
     }
 
-    private static void rushTest(RemoteCache<Object, Object> cache, String taskName) {
+    private static void checkCacheCompute(RemoteCache<Object, Object> cache) {
+
+        System.out.println("+++++++++++++++++++++++++++++++++++++++++++++");
+        System.out.println("CacheComputeTask");
+
+        cache.put(1, 1);
+
+        String threadInfoMessage = (String) cache.execute("CacheCompute", Collections.EMPTY_MAP, 1);
+        System.out.println(threadInfoMessage);
+
+        cache.clear();
+    }
+
+    private static void rushTest(RemoteCache<?, ?> cache, String taskName, Consumer<Void> initialProcess, Function<Integer, Integer> getProcess) {
 
         System.out.println("+++++++++++++++++++++++++++++++++++++++++++++");
 
@@ -118,7 +144,7 @@ public class Main {
         final int stockNum = 100_000;
 
         //キャッシュを初期化
-        cache.put(orderItemNo, stockNum);
+        initialProcess.accept(null);
 
         //処理のパラメータを作成
         Map<String, Object> orderInfo = new HashMap<>();
@@ -156,7 +182,7 @@ public class Main {
         }
 
         //負荷かけ後の在庫を出力
-        System.out.println("After rushing, Stocked Item Num : " + cache.get(orderItemNo));
+        System.out.println("After rushing, Stocked Item Num : " + getProcess.apply(1));
 
         // 事後処理
         executorService.shutdownNow();

@@ -1,4 +1,6 @@
 chiroito.task.PidTask
 chiroito.task.ThreadInfoTask
-chiroito.task.StockAllocationConputeTask
+chiroito.task.StockAllocationComputeTask
 chiroito.task.StockAllocationGetPutTask
+chiroito.task.StockAllocationComputeWithLogicTask
+chiroito.task.CacheComputeTask
