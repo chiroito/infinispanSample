@@ -4,3 +4,4 @@ chiroito.task.StockAllocationComputeTask
 chiroito.task.StockAllocationGetPutTask
 chiroito.task.StockAllocationComputeWithLogicTask
 chiroito.task.CacheComputeTask
+chiroito.task.StockAllocationWithHistoryTask

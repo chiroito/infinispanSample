@@ -1,5 +1,9 @@
 package chiroito.task;
 
+import chiroito.domain.Stock;
+import chiroito.entity.AllocationRequest;
+import chiroito.entity.AllocationResponse;
+import chiroito.entity.StockEntity;
 import org.infinispan.Cache;
 import org.infinispan.tasks.ServerTask;
 import org.infinispan.tasks.TaskContext;
@@ -7,7 +11,7 @@ import org.infinispan.util.function.SerializableBiFunction;
 
 import java.util.Map;
 
-public class StockAllocationComputeWithLogicTask implements ServerTask<Boolean> {
+public class StockAllocationComputeWithLogicTask implements ServerTask<chiroito.entity.AllocationResponse> {
 
     private TaskContext context;
 
@@ -23,7 +27,7 @@ public class StockAllocationComputeWithLogicTask implements ServerTask<Boolean> 
      * @throws Exception
      */
     @Override
-    public Boolean call() throws Exception {
+    public AllocationResponse call() throws Exception {
 
         try {
             // 実行時のパラメータを取得
@@ -31,23 +35,23 @@ public class StockAllocationComputeWithLogicTask implements ServerTask<Boolean> 
             int orderItemNo = (Integer) param.get("ItemNo");
             int orderNum = (Integer) param.get("Num");
 
-            AllocationRequest request = new AllocationRequest(orderNum);
+            AllocationRequest request = new chiroito.entity.AllocationRequest(orderNum);
 
             // キャッシュを取得
-            Cache<Integer, StockEntity> userCache = (Cache<Integer, StockEntity>) this.context.getCache().get();
+            Cache<Integer, chiroito.entity.StockEntity> userCache = (Cache<Integer, chiroito.entity.StockEntity>) this.context.getCache().get();
 
             //業務処理を作成
             AllocateTask allocateTask = new AllocateTask(request);
 
             // 業務処理を実行
-            StockEntity newCachedData = userCache.computeIfPresent(orderItemNo, allocateTask);
+            chiroito.entity.StockEntity newCachedData = userCache.computeIfPresent(orderItemNo, allocateTask);
 
-            return newCachedData != null;
+            return new chiroito.entity.AllocationResponse(newCachedData != null);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return false;
+        return new chiroito.entity.AllocationResponse(false);
     }
 
     @Override
@@ -58,60 +62,24 @@ public class StockAllocationComputeWithLogicTask implements ServerTask<Boolean> 
     /**
      * キャッシュに対して行う処理
      */
-    class AllocateTask implements SerializableBiFunction<Integer, StockEntity, StockEntity> {
+    class AllocateTask implements SerializableBiFunction<Integer, chiroito.entity.StockEntity, StockEntity> {
 
-        private final AllocationRequest request;
+        private final chiroito.entity.AllocationRequest request;
 
-        public AllocateTask(AllocationRequest request) {
+        public AllocateTask(chiroito.entity.AllocationRequest request) {
             this.request = request;
         }
 
         @Override
-        public StockEntity apply(Integer userId, StockEntity cachedStockData) {
+        public chiroito.entity.StockEntity apply(Integer userId, chiroito.entity.StockEntity cachedStockData) {
 
             // キャッシュされた情報からドメインオブジェクトを作成
-            Stock stock = new Stock(userId, cachedStockData.getNum());
+            chiroito.domain.Stock stock = new chiroito.domain.Stock(userId, cachedStockData.getNum());
 
             Stock newStock = stock.allocate(request);
 
             // 新たにキャッシュに格納されるデータ
-            return new StockEntity(newStock.stockedNum);
-        }
-    }
-
-
-    /**
-     * ドメイン処理
-     */
-    class Stock {
-
-        private final int itemId;
-        private int stockedNum;
-
-        public Stock(int itemId, int stockedNum) {
-            this.itemId = itemId;
-            this.stockedNum = stockedNum;
-        }
-
-        public Stock allocate(AllocationRequest req) {
-
-            if (stockedNum < req.num) {
-                throw new RuntimeException("在庫が足りません");
-            }
-
-            return new Stock(itemId, stockedNum - req.num);
-        }
-    }
-
-    /**
-     * ドメインのバリューオブジェクト
-     */
-    class AllocationRequest {
-
-        public final int num;
-
-        public AllocationRequest(int num) {
-            this.num = num;
+            return new chiroito.entity.StockEntity(newStock.getStockedNum());
         }
     }
 }

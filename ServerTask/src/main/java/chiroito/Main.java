@@ -1,15 +1,15 @@
 package chiroito;
 
-import chiroito.task.LibraryInitializer;
-import chiroito.task.StockEntity;
+import chiroito.entity.AllocationHistoryKey;
+import chiroito.entity.StockEntity;
 import org.infinispan.client.hotrod.DefaultTemplate;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
 import org.infinispan.client.hotrod.configuration.Configuration;
 import org.infinispan.client.hotrod.configuration.ConfigurationBuilder;
 import org.infinispan.commons.api.CacheContainerAdmin;
+import org.infinispan.commons.configuration.XMLStringConfiguration;
 import org.infinispan.commons.marshall.ProtoStreamMarshaller;
-import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,7 +20,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 public class Main {
 
@@ -30,12 +29,21 @@ public class Main {
     private static final String user = "admin";
     private static final String password = "password";
 
-    public static void main(String[] args) throws Exception{
+    private static final String CACHE_CONFIG = "<distributed-cache name=\"%s\">"
+            + " <encoding media-type=\"application/x-protostream\"/><groups enabled=\"true\"/>"
+            + "</distributed-cache>";
+
+
+    public static void main(String[] args) throws Exception {
 
         Configuration configuration = createConfiguration();
 
         RemoteCacheManager manager = new RemoteCacheManager(configuration);
-        RemoteCache<Object, Object> cache = manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("custom-cache", DefaultTemplate.DIST_SYNC);
+        RemoteCache<Object, Object> cache = manager.administration().getOrCreateCache("custom-cache",
+                new XMLStringConfiguration(String.format(CACHE_CONFIG, "custom-cache")));
+        RemoteCache<AllocationHistoryKey, chiroito.entity.AllocationHistoryValue> allocationHistoryCache = manager.administration().getOrCreateCache("allocation-history",
+                new XMLStringConfiguration(String.format(CACHE_CONFIG, "allocation-history")));
+
 
         // サーバのPIDを取得する
         checkPid(cache);
@@ -46,6 +54,9 @@ public class Main {
         // サーバで処理する際に排他処理を行うスタックを取得する
         checkCacheCompute(cache);
 
+        // 同時に複数のキャッシュを操作する
+        putOtherCacheTest(cache, allocationHistoryCache, 1, 10);
+
         // 負荷試験、排他処理がきちんと行われる
         rushTest(cache, "StockAllocationComputeTask", (i) -> cache.put(1, 100_000), (i) -> (Integer) cache.get(1));
 
@@ -53,15 +64,13 @@ public class Main {
         rushTest(cache, "StockAllocationGetPutTask", (i) -> cache.put(1, 100_000), (i) -> (Integer) cache.get(1));
 
         // 負荷試験、独自のクラスをキャッシュするようにして、排他的な処理をする
-        RemoteCache<Integer, StockEntity> stockCache = manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("stock-cache", DefaultTemplate.DIST_SYNC);
+        RemoteCache<Integer, chiroito.entity.StockEntity> stockCache = manager.administration().withFlags(CacheContainerAdmin.AdminFlag.VOLATILE).getOrCreateCache("stock-cache", DefaultTemplate.DIST_SYNC);
         rushTest(stockCache, "StockAllocationComputeWithLogicTask", (i) -> stockCache.put(1, new StockEntity(100_000)), (i) -> stockCache.get(1).getNum());
 
         manager.stop();
     }
 
-    private static Configuration createConfiguration() throws Exception{
-
-//        LibraryInitializer initializer = (LibraryInitializer)(Class.forName("chiroito.task.LibraryInitializerImpl").getConstructor().newInstance());
+    private static Configuration createConfiguration() throws Exception {
 
         ConfigurationBuilder cb
                 = new ConfigurationBuilder();
@@ -72,7 +81,7 @@ public class Main {
                 .addServer()
                 .host(hostname)
                 .port(port)
-                .addContextInitializer("chiroito.task.LibraryInitializerImpl")
+                .addContextInitializer("chiroito.entity.LibraryInitializerImpl")
                 // デフォルトは10
                 .asyncExecutorFactory().addExecutorProperty("infinispan.client.hotrod.default_executor_factory.pool_size", "10")
                 //デフォルトは100,000
@@ -133,6 +142,29 @@ public class Main {
         String threadInfoMessage = (String) cache.execute("CacheCompute", Collections.EMPTY_MAP, 1);
         System.out.println(threadInfoMessage);
 
+        cache.clear();
+    }
+
+    private static void putOtherCacheTest(RemoteCache<?, ?> cache, RemoteCache<chiroito.entity.AllocationHistoryKey, chiroito.entity.AllocationHistoryValue> historyCache, final int fromOrderItemNo, final int toOrderItemNo) {
+
+        System.out.println("+++++++++++++++++++++++++++++++++++++++++++++");
+        System.out.println("StockAllocationWithHistoryTask");
+
+        for (int i = fromOrderItemNo; i <= toOrderItemNo; i++) {
+
+            String orderItemNo = String.valueOf(i);
+
+            //処理のパラメータを作成
+            Map<String, Object> orderInfo = new HashMap<>();
+            orderInfo.put("ItemNo", orderItemNo);
+            orderInfo.put("Num", 1);
+
+            cache.execute("StockAllocationWithHistoryTask", orderInfo, orderItemNo);
+        }
+
+        cache.entrySet().stream().forEach(System.out::println);
+        historyCache.entrySet().stream().forEach(System.out::println);
+        // 事後処理
         cache.clear();
     }
 
