@@ -23,10 +23,10 @@ public class JavaChildKey implements Serializable, Comparable<JavaChildKey> {
         return branchNumber;
     }
 
-//    @Group
-//    public String affinity() {
-//        return "" + parentId;
-//    }
+    @Group
+    public String affinity() {
+        return "" + parentId;
+    }
 
     @Override
     public boolean equals(Object o) {
